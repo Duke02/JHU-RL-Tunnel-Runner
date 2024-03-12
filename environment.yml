@@ -1,0 +1,16 @@
+name: TunnelRunner
+channels:
+  - defaults
+dependencies:
+  - python=3.10
+  - matplotlib
+  - numpy
+  - plotly
+  - seaborn
+  - jupyter
+  - tqdm
+  - pygame
+  - opencv
+  - pandas
+  - marimo
+prefix: /home/duke_trystan/miniconda3/envs/TunnelRunner
