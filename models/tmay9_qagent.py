@@ -14,7 +14,8 @@ import typing as tp
 class QAgent:
     def __init__(self, num_states: int, num_actions: int, initial_epsilon: float, discount_factor: float, learning_rate: float,
             terminal_states: tp.Set[int], win_states: set[int], final_epsilon: float, epsilon_step: float, initial_q_value: float):
-        self.qtable: np.ndarray = initial_q_value * np.ones((num_states, num_actions))
+        self.initial_q_value: float = initial_q_value
+        self.qtable: np.ndarray = self.initial_q_value * np.ones((num_states, num_actions))
         self.final_epsilon: float = final_epsilon
         self.epsilon_step: float = epsilon_step
         self.epsilon: float = initial_epsilon
@@ -33,7 +34,7 @@ class QAgent:
 
     @property
     def perc_states_visited(self) -> float:
-        return np.sum(np.any(np.abs(self.qtable) > 0, axis=1)) / self.qtable.shape[0]
+        return np.sum(np.any(np.abs(self.qtable - self.initial_q_value) > 1e-6, axis=1)) / self.qtable.shape[0]
 
     def is_win(self, state: int) -> bool:
         return state in self.win_states

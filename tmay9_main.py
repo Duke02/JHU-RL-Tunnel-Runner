@@ -7,7 +7,7 @@ from models.tmay9_qagent import QAgent
 from environment import Environment
 
 
-n_episodes: int = 40
+n_episodes: int = 50
 
 
 def train_agent(env: Environment, agent: QAgent) -> QAgent:
@@ -28,15 +28,14 @@ if __name__ == '__main__':
     env: Environment = Environment()
     num_agents: int = 10
 
-    best_initial_epsilon: float = 0.05
+    best_initial_epsilon: float = 0.5
     best_final_epsilon: float = 0.05
     best_episodes_percent: float = .1
     _num_episodes: int = int(n_episodes * best_episodes_percent)
     best_epsilon_step: float = (best_initial_epsilon - best_final_epsilon) / _num_episodes
-    best_starting_q_value: float = -1
+    best_starting_q_value: float = 0
     best_discount_factor: float = 0.85
     best_learning_rate_q: float = 0.75
-    best_learning_rate_s: float = 0.7
 
     qlearners: tp.List[QAgent] = [
         QAgent(env.get_number_of_states(), env.get_number_of_actions(), initial_epsilon=best_initial_epsilon, final_epsilon=best_final_epsilon,
