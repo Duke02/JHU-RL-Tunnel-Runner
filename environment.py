@@ -88,7 +88,7 @@ class Environment:
         out_initial_state: int = self.get_state()
         return out_initial_state
 
-    def update_states(self):
+    def update_states(self): 
         self.current_cannon_timestep = (self.current_cannon_timestep + 1) % self.side_length
 
     def apply_action_to_player_loc(self, action: int):

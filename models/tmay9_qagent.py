@@ -11,13 +11,9 @@ import numpy as np
 import typing as tp
 
 
-def is_win(state: int) -> bool:
-    return state == 126
-
-
 class QAgent:
     def __init__(self, num_states: int, num_actions: int, initial_epsilon: float, discount_factor: float, learning_rate: float,
-            terminal_states: tp.Set[int], final_epsilon: float, epsilon_step: float, initial_q_value: float):
+            terminal_states: tp.Set[int], win_states: set[int], final_epsilon: float, epsilon_step: float, initial_q_value: float):
         self.qtable: np.ndarray = initial_q_value * np.ones((num_states, num_actions))
         self.final_epsilon: float = final_epsilon
         self.epsilon_step: float = epsilon_step
@@ -29,13 +25,30 @@ class QAgent:
         self.last_state_seen: int | None = None
 
         self.terminal_states: tp.Set[int] = terminal_states
+        self.win_states: set[int] = win_states
         self.qtable[list(self.terminal_states), :] = 0
         self.curr_rewards: float = 0
+        self.last_30_rewards: tp.List[float] = []
+        self.did_win_last_30: tp.List[bool] = []
+
+    @property
+    def perc_states_visited(self) -> float:
+        return np.sum(np.any(np.abs(self.qtable) > 0, axis=1)) / self.qtable.shape[0]
+
+    def is_win(self, state: int) -> bool:
+        return state in self.win_states
 
     def reset(self):
         np.random.seed(self.seed)
+        if self.last_state_seen is not None:
+            self.did_win_last_30.append(self.is_win(self.last_state_seen))
         self.last_action = None
         self.last_state_seen = None
+        self.last_30_rewards.append(self.curr_rewards)
+
+        if len(self.last_30_rewards) > 30:
+            self.last_30_rewards.pop(0)
+            self.did_win_last_30.pop(0)
 
         # If we're to increase from init to final
         if self.epsilon_step > 0 and self.epsilon < self.final_epsilon:

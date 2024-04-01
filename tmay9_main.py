@@ -1,14 +1,17 @@
 import typing as tp
 
+import numpy as np
+from tqdm import tqdm
+
 from models.tmay9_qagent import QAgent
 from environment import Environment
 
 
-n_episodes: int = 100
+n_episodes: int = 40
 
 
 def train_agent(env: Environment, agent: QAgent) -> QAgent:
-    for _ in range(n_episodes):
+    for _ in tqdm(range(n_episodes), 'Training an agent...'):
         agent.reset()
         curr_state: int = env.reset()
         reward: float = 0
@@ -38,6 +41,10 @@ if __name__ == '__main__':
     qlearners: tp.List[QAgent] = [
         QAgent(env.get_number_of_states(), env.get_number_of_actions(), initial_epsilon=best_initial_epsilon, final_epsilon=best_final_epsilon,
                epsilon_step=best_epsilon_step, discount_factor=best_discount_factor, learning_rate=best_learning_rate_q,
-               terminal_states=env.get_terminal_states(), initial_q_value=best_starting_q_value) for _ in
+               terminal_states=env.get_terminal_states(), initial_q_value=best_starting_q_value, win_states=env.goal_states) for _ in
         range(num_agents)]
     qlearners = [train_agent(env, agent) for i, agent in enumerate(qlearners)]
+    average_win_score: float = np.mean([np.sum(q.did_win_last_30) / 30 for q in qlearners])
+    average_states_visited: float = np.mean([q.perc_states_visited for q in qlearners])
+
+    print(f'Average Win Score: {average_win_score * 100:2.2f} | Average States Visited: {average_states_visited * 100:2.2f}')
