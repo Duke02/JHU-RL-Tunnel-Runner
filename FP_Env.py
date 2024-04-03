@@ -5,8 +5,8 @@ import random
 
 def get_state_index(x, y, z):
     x_idx = x
-    y_idx = 7 * y + y
-    z_idx = 49 * z
+    y_idx = 7 * y
+    z_idx = 49 * z + 1
     return x_idx + y_idx + z_idx   # ranges from 0 to 342
 
 
