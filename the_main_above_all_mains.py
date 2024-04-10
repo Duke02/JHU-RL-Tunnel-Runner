@@ -171,6 +171,6 @@ if __name__ == '__main__':
     print('Saving results...')
 
     results_df: pd.DataFrame = pd.concat([q_df, s_df, mc_df])
-    results_df.to_csv(MODELS_DIR / 'results.df', index=False)
+    results_df.to_csv(MODELS_DIR / 'results.csv', index=False)
 
     print('Done!')
