@@ -13,7 +13,7 @@ import pandas as pd
 
 from models.tmay9_qagent import QAgent
 from models.RL_agentS0 import SARSA_0
-from MC_agent import RlAgent as MonteCarlo
+from models.MC_agent import RlAgent as MonteCarlo
 from environment import Environment as Env
 
 # Total number of episodes to train each agent on.
