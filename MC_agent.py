@@ -84,7 +84,7 @@ class RlAgent:
                 self.visited_states.append(stte)
         
         # get # of visited states for current episode
-        v_t = len(self.visited_states)
+        v_t = len(set(self.visited_states))
         return G, v_t
         
     def update_episode(self, current_state, action, reward):
