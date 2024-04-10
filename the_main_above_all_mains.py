@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from models.tmay9_qagent import QAgent
-from RL_Final_Project_agentS import SARSA_0
+from models.RL_agentS0 import SARSA_0
 from MC_agent import RlAgent as MonteCarlo
 from environment import Environment as Env
 
