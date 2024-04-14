@@ -6,6 +6,7 @@ import typing as tp
 from pathlib import Path
 from collections import deque
 import json
+from copy import deepcopy
 
 from tqdm import tqdm
 import numpy as np
@@ -30,6 +31,10 @@ class TrainingResult(tp.TypedDict):
     perc_states_visited: float
     total_gain: float
     win_rate: float
+    convergence_rate: float
+    sample_efficiency: float
+    asymptotic_performance: float
+    has_converged: bool
 
 
 def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
@@ -48,7 +53,11 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
     return TrainingResult(agent=agent,
                           win_rate=float(sum(agent.did_win_last_30)) / min(30, NUM_EPISODES),
                           perc_states_visited=agent.perc_states_visited,
-                          total_gain=total_gain)
+                          total_gain=total_gain,
+                          convergence_rate=agent.convergence_rate,
+                          sample_efficiency=agent.sample_efficiency,
+                          asymptotic_performance=agent.asymptotic_performance,
+                          has_converged=agent.is_converged)
 
 
 def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
@@ -80,7 +89,11 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
                           win_rate=sum(did_win) / len(did_win),
-                          perc_states_visited=len(states_visited) / env.number_of_states)
+                          perc_states_visited=len(states_visited) / env.number_of_states,
+                          convergence_rate=agent.convergence_rate,
+                          sample_efficiency=agent.sample_efficiency,
+                          asymptotic_performance=agent.asymptotic_performance,
+                          has_converged=agent.is_converged)
 
 
 def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
@@ -109,7 +122,17 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
                           perc_states_visited=len(states_visited) / env.number_of_states,
-                          win_rate=sum(did_win) / len(did_win))
+                          win_rate=sum(did_win) / len(did_win),
+                          convergence_rate=-1,
+                          sample_efficiency=0,
+                          asymptotic_performance=0,
+                          has_converged=False)
+
+
+def create_training_result_to_save(tr: TrainingResult) -> TrainingResult:
+    out: TrainingResult = deepcopy(tr)
+    out['agent'] = None
+    return out
 
 
 if __name__ == '__main__':
@@ -121,8 +144,8 @@ if __name__ == '__main__':
     qagents: list[QAgent] = [
         QAgent(environment.number_of_states, environment.number_of_possible_actions, initial_epsilon=.1, discount_factor=.9, learning_rate=.1,
                terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1, epsilon_step=0, initial_q_value=0)
-        for _ in range(NUM_AGENTS)]
-    sarsas: list[SARSA_0] = [SARSA_0() for _ in range(NUM_AGENTS)]
+        for i in range(NUM_AGENTS)]
+    sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES // 2, seed=i * 13) for i in range(NUM_AGENTS)]
     monte_carlos: list[MonteCarlo] = [MonteCarlo() for _ in range(NUM_AGENTS)]
 
     print('Training models...')
@@ -151,15 +174,9 @@ if __name__ == '__main__':
 
     print('Processing results...')
 
-    q_results_to_save: list[TrainingResult] = [TrainingResult(win_rate=tr['win_rate'],
-                                                              perc_states_visited=tr['perc_states_visited'],
-                                                              total_gain=tr['total_gain'], agent=None) for tr in qagent_results]
-    sarsa_results_to_save: list[TrainingResult] = [TrainingResult(win_rate=tr['win_rate'],
-                                                              perc_states_visited=tr['perc_states_visited'],
-                                                              total_gain=tr['total_gain'], agent=None) for tr in sarsa_results]
-    mc_results_to_save: list[TrainingResult] = [TrainingResult(win_rate=tr['win_rate'],
-                                                              perc_states_visited=tr['perc_states_visited'],
-                                                              total_gain=tr['total_gain'], agent=None) for tr in mc_results]
+    q_results_to_save: list[TrainingResult] = [create_training_result_to_save(tr) for tr in qagent_results]
+    sarsa_results_to_save: list[TrainingResult] = [create_training_result_to_save(tr) for tr in sarsa_results]
+    mc_results_to_save: list[TrainingResult] = [create_training_result_to_save(tr) for tr in mc_results]
 
     q_df: pd.DataFrame = pd.DataFrame.from_records(q_results_to_save)
     q_df['agent'] = 'QAgent'

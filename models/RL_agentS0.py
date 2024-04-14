@@ -11,7 +11,7 @@ def get_state_index(x, y, z):
 class SARSA_0:
     """ On policy SARSA RL agent, updated for the TunnelRunner environment."""
 
-    def __init__(self):
+    def __init__(self, num_episodes_to_decay_epsilon: int = 1_000, seed: int = 13):
         self.initial_state = get_state_index(0, 0, 0)
         self.expl_x = 0  # Explorer's x position from 0 to 7
         self.expl_y = 0  # Explorer's y position from 0 to 7
@@ -26,9 +26,36 @@ class SARSA_0:
         self.action = 0
         self.epsilon_max = 1.0  # Starting value of epsilon
         self.epsilon_min = 0.01  # Minimum value of epsilon
-        self.N = 1000  # Total number of episodes to reduce epsilon
+        self.N = num_episodes_to_decay_epsilon  # Total number of episodes to reduce epsilon
         self.n_step = 0  # Counter for the number of steps (for epsilon decay)
         self.q = np.zeros((self.num_states, self.num_actions), dtype="float64")  # State-action values array, resized
+
+        self.rng = np.random.default_rng(seed=seed)
+
+        # Data for converge rate
+        self.last_qtable: np.ndarray | None = None
+        self.convergence_rate: int = -1
+        self.episodes_trained: int = 0
+        self.convergence_tolerance: float = 1e-3
+
+        # Data to save for sample efficiency
+        self.cumulative_rewards: float = 0
+
+        # Data to save for asymptotic performance
+        self.rewards_since_convergence: float = 0
+        self.rewards_for_curr_episode: float = 0
+
+    @property
+    def asymptotic_performance(self) -> float:
+        return 0 if not self.is_converged else self.rewards_since_convergence / (self.episodes_trained - self.convergence_rate)
+
+    @property
+    def is_converged(self) -> bool:
+        return self.convergence_rate > 0
+
+    @property
+    def sample_efficiency(self) -> float:
+        return self.cumulative_rewards
 
     # Get the key environment parameters
     def get_number_of_states(self):
@@ -48,9 +75,8 @@ class SARSA_0:
 
     def e_greedy(self, state):
         self.state = state
-        rng = np.random.default_rng()
         a_star = np.argmax(self.q[state])
-        if rng.random() > self.epsilon:
+        if self.rng.random() > self.epsilon:
             return a_star
         else:
             return np.random.choice(self.num_actions)
@@ -66,10 +92,26 @@ class SARSA_0:
     def start_episode(self):
         self.episode = []
 
+        self.cumulative_rewards += self.rewards_for_curr_episode
+        if self.is_converged:
+            self.rewards_since_convergence += self.rewards_for_curr_episode
+        else:
+            self.rewards_since_convergence = 0
+        self.rewards_for_curr_episode = 0
+
+        if self.episodes_trained > 0:
+            if not self.is_converged and np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all():
+                self.convergence_rate = self.episodes_trained
+            elif self.is_converged and not np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all():
+                self.convergence_rate = -1
+        self.last_qtable: np.ndarray = self.q.copy()
+        self.episodes_trained += 1
+
     def store_step(self, state, action, reward):
         self.episode.append((state, action, reward))
 
     def update_Q_SARSA(self, s, a, r, next_s, next_a):
+        self.rewards_for_curr_episode += r
         # Apply the SARSA update rule directly on self.q
         Q_next = self.q[next_s][next_a] if next_a is not None else 0  # If next state is goal, Q_next is 0.
         self.q[s][a] = self.q[s][a] + self.alpha * (r + self.gamma * Q_next - self.q[s][a])
