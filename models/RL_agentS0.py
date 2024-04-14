@@ -30,7 +30,8 @@ class SARSA_0:
         self.n_step = 0  # Counter for the number of steps (for epsilon decay)
         self.q = np.zeros((self.num_states, self.num_actions), dtype="float64")  # State-action values array, resized
 
-        self.rng = np.random.default_rng(seed=seed)
+        self.seed: int = seed
+        self.rng = np.random.default_rng(seed=self.seed)
 
         # Data for converge rate
         self.last_qtable: np.ndarray | None = None
@@ -100,9 +101,10 @@ class SARSA_0:
         self.rewards_for_curr_episode = 0
 
         if self.episodes_trained > 0:
-            if not self.is_converged and np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all():
+            has_small_difference: bool = np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all()
+            if not self.is_converged and has_small_difference:
                 self.convergence_rate = self.episodes_trained
-            elif self.is_converged and not np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all():
+            elif self.is_converged and not has_small_difference:
                 self.convergence_rate = -1
         self.last_qtable: np.ndarray = self.q.copy()
         self.episodes_trained += 1

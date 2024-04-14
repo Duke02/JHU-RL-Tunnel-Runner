@@ -47,6 +47,14 @@ class QAgent:
         self.rewards_since_convergence: float = 0
 
     @property
+    def total_gain_over_last_30_episodes(self) -> float:
+        return sum(self.last_30_rewards)
+
+    @property
+    def discounted_gain(self):
+        return sum([(self.discount_factor ** i) * reward for i, reward in enumerate(self.last_30_rewards)])
+
+    @property
     def asymptotic_performance(self) -> float:
         if not self.is_converged:
             return 0
@@ -58,7 +66,7 @@ class QAgent:
 
     @property
     def is_converged(self) -> bool:
-        return self.convergence_rate is not None
+        return self.convergence_rate is not None and self.convergence_rate > 0
 
     @property
     def perc_states_visited(self) -> float:
@@ -70,9 +78,11 @@ class QAgent:
     def reset(self):
         if self.last_state_seen is not None:
             self.did_win_last_30.append(self.is_win(self.last_state_seen))
+            self.last_30_rewards.append(self.curr_rewards)
+
         self.last_action = None
         self.last_state_seen = None
-        self.last_30_rewards.append(self.curr_rewards)
+
         if self.is_converged:
             self.rewards_since_convergence += self.curr_rewards
         else:
@@ -87,12 +97,13 @@ class QAgent:
 
         # If we've already trained
         if self.episodes_trained > 0:
+            has_small_difference: bool = np.isclose(self.last_qtable - self.qtable, 0, atol=self.convergence_tolerance).all()
             # And we haven't seen a significant amount of update
-            if not self.is_converged and np.isclose(self.last_qtable - self.qtable, 0, atol=self.convergence_tolerance).all():
+            if not self.is_converged and has_small_difference:
                 # Then we've converged at this episode
                 self.convergence_rate = self.episodes_trained
             # But if we're still changing even after we've "converged"
-            elif self.is_converged and not np.isclose(self.last_qtable - self.qtable, 0, atol=self.convergence_tolerance).all():
+            elif self.is_converged and not has_small_difference:
                 # Then we haven't actually converged.
                 self.convergence_rate = None
         self.last_qtable = self.qtable.copy()

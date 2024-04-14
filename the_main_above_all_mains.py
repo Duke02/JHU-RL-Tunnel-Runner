@@ -7,6 +7,7 @@ from pathlib import Path
 from collections import deque
 import json
 from copy import deepcopy
+from itertools import pairwise
 
 from tqdm import tqdm
 import numpy as np
@@ -21,6 +22,7 @@ from environment import Environment as Env
 NUM_EPISODES: int = 10_000
 # Total number of agents per AI Type.
 NUM_AGENTS: int = 10
+OPTIMAL_PATH_LENGTH: int = 11
 
 DATA_DIR: Path = Path('.').resolve() / 'data'
 MODELS_DIR: Path = DATA_DIR / 'models'
@@ -28,6 +30,7 @@ MODELS_DIR: Path = DATA_DIR / 'models'
 
 class TrainingResult(tp.TypedDict):
     agent: QAgent | SARSA_0 | MonteCarlo | None
+    seed: int
     perc_states_visited: float
     total_gain: float
     win_rate: float
@@ -37,46 +40,77 @@ class TrainingResult(tp.TypedDict):
     has_converged: bool
 
 
+def has_converged(path_lens: tp.Iterable[int], tolerance: int = 1) -> bool:
+    return all(int(abs(pl - OPTIMAL_PATH_LENGTH)) <= tolerance for pl in path_lens)
+
+
 def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
     total_gain: float = 0
-    for _ in tqdm(range(NUM_EPISODES), 'Training QAgent...'):
+    convergence_rate: int = -1
+    path_len_last_30_episodes: deque[int] = deque([], 30)
+    for episode in tqdm(range(NUM_EPISODES), 'Training QAgent...'):
+        if episode > 30:
+            converged: bool = has_converged(path_len_last_30_episodes)
+            if convergence_rate < 0 and converged:
+                convergence_rate = episode
+            # This is for if we wanted the first time we "converge" to be
+            # not considered the convergence rate.
+            # We consider the first convergence to be a true convergence
+            # as our models inherently are random and therefore will always
+            # have a possibility of not choosing the optimal action at any
+            # given state.
+
+            #     if first_convergence_rate < 0:
+            #         first_convergence_rate = convergence_rate
+            # elif convergence_rate > 0 and not converged:
+            #     convergence_rate = -1
+            agent.convergence_rate = convergence_rate
         agent.reset()
         curr_state: int = env.reset()
         reward: float = 0
         is_terminal: bool = curr_state in env.get_terminal_states()
 
+        curr_path_len: int = 0
         while not is_terminal:
             action: int = agent.react_to_state(curr_state, reward)
             curr_state, reward, is_terminal = env.execute_action(action)
             total_gain += reward * agent.discount_factor
+            curr_path_len += 1
+        path_len_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
         agent.react_to_state(curr_state, reward)
     return TrainingResult(agent=agent,
                           win_rate=float(sum(agent.did_win_last_30)) / min(30, NUM_EPISODES),
                           perc_states_visited=agent.perc_states_visited,
                           total_gain=total_gain,
-                          convergence_rate=agent.convergence_rate,
+                          convergence_rate=convergence_rate,
                           sample_efficiency=agent.sample_efficiency,
                           asymptotic_performance=agent.asymptotic_performance,
-                          has_converged=agent.is_converged)
+                          has_converged=convergence_rate > 0,
+                          seed=agent.seed)
 
 
 def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
     total_gain: float = 0
     did_win: deque[bool] = deque(maxlen=30)
+    path_len_last_30_episodes: deque[int] = deque([], 30)
     states_visited: set[int] = set()
-    for _ in tqdm(range(NUM_EPISODES), 'Training SARSA...'):
+    for episode in tqdm(range(NUM_EPISODES), 'Training SARSA...'):
+        if episode > 30 and not agent.is_converged and has_converged(path_len_last_30_episodes):
+            agent.convergence_rate = episode
         agent.start_episode()
         curr_state: int = env.reset()
         states_visited.add(curr_state)
         is_terminal: bool = curr_state in env.get_terminal_states()
-        reward: float
+        reward: float = 0
         next_state: int = curr_state
+        curr_path_len: int = 0
 
         while not is_terminal:
             action: int = agent.select_action(curr_state)
             next_state, reward, is_terminal = env.execute_action(action)
             states_visited.add(next_state)
             total_gain += reward * agent.gamma
+            curr_path_len += 1
 
             if is_terminal:
                 break
@@ -84,6 +118,7 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
             next_action: int = agent.select_action(next_state)
             agent.update_Q_SARSA(curr_state, action, reward, next_state, next_action)
             curr_state = next_state
+        path_len_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
         did_win.append(next_state in env.goal_states)
 
     return TrainingResult(agent=agent,
@@ -93,7 +128,8 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
                           convergence_rate=agent.convergence_rate,
                           sample_efficiency=agent.sample_efficiency,
                           asymptotic_performance=agent.asymptotic_performance,
-                          has_converged=agent.is_converged)
+                          has_converged=agent.is_converged,
+                          seed=agent.seed)
 
 
 def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
@@ -102,18 +138,28 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
     total_gain: float = 0
     states_visited: set[int] = set()
     did_win: deque[bool] = deque(maxlen=30)
+    path_lens_last_30_episodes: deque[int] = deque([], 30)
 
-    for _ in tqdm(range(NUM_EPISODES), 'Training Monte Carlo...'):
+    for episode in tqdm(range(NUM_EPISODES), 'Training Monte Carlo...'):
+        if episode > 30 and not agent.is_converged and has_converged(path_lens_last_30_episodes):
+            agent.convergence_rate = episode
+
         curr_state: int = env.reset()
         agent.new_episode()
         is_terminal: bool = curr_state in env.get_terminal_states()
-        reward: float
+        reward: float = 0
+
+        curr_path_len: int = 0
 
         while not is_terminal:
             action: int = agent.select_action(curr_state)
             new_state, reward, is_terminal = env.execute_action(action)
             agent.update_episode(curr_state, action, reward)
             curr_state = new_state
+            curr_path_len += 1
+
+        path_lens_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
+
         curr_gain, _ = agent.update_q()
         total_gain += curr_gain
         states_visited.update(set(agent.visited_states))
@@ -123,10 +169,11 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
                           total_gain=total_gain,
                           perc_states_visited=len(states_visited) / env.number_of_states,
                           win_rate=sum(did_win) / len(did_win),
-                          convergence_rate=-1,
-                          sample_efficiency=0,
-                          asymptotic_performance=0,
-                          has_converged=False)
+                          convergence_rate=agent.convergence_rate,
+                          sample_efficiency=agent.sample_efficiency,
+                          asymptotic_performance=agent.asymptotic_performance,
+                          has_converged=agent.is_converged,
+                          seed=agent.seed)
 
 
 def create_training_result_to_save(tr: TrainingResult) -> TrainingResult:
@@ -142,11 +189,11 @@ if __name__ == '__main__':
 
     environment: Env = Env()
     qagents: list[QAgent] = [
-        QAgent(environment.number_of_states, environment.number_of_possible_actions, initial_epsilon=.1, discount_factor=.9, learning_rate=.1,
-               terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1, epsilon_step=0, initial_q_value=0)
-        for i in range(NUM_AGENTS)]
+        QAgent(environment.number_of_states, environment.number_of_possible_actions, initial_epsilon=0.1, discount_factor=.9, learning_rate=.1,
+               terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1,
+               epsilon_step=0, initial_q_value=0, seed=13 * i) for i in range(NUM_AGENTS)]
     sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES // 2, seed=i * 13) for i in range(NUM_AGENTS)]
-    monte_carlos: list[MonteCarlo] = [MonteCarlo() for _ in range(NUM_AGENTS)]
+    monte_carlos: list[MonteCarlo] = [MonteCarlo(seed=i * 13) for i in range(NUM_AGENTS)]
 
     print('Training models...')
 

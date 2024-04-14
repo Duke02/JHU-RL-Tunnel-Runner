@@ -91,24 +91,21 @@ class Environment:
     def update_states(self): 
         self.current_cannon_timestep = (self.current_cannon_timestep + 1) % self.side_length
 
-    def apply_action_to_player_loc(self, action: int):
+    def apply_action_to_player_loc(self, action: int) -> bool:
         new_location: np.ndarray = self.agent_location + np.array(list(self.directions[action]))
         new_x, new_y = new_location[0].item(), new_location[1].item()
 
-        while new_x < 0:
-            new_x += self.side_length
-        while new_y < 0:
-            new_y += self.side_length
+        is_invalid_action: bool = new_x >= self.side_length or new_y >= self.side_length or new_x < 0 or new_y < 0
 
-        new_x %= self.side_length
-        new_y %= self.side_length
-
-        if self.is_accessible(new_x, new_y):
+        # If we get an invalid action,
+        # we're just gonna ignore it.
+        if not is_invalid_action and self.is_accessible(new_x, new_y):
             self.agent_location = np.array([new_x, new_y])
+        return is_invalid_action
 
     def execute_action(self, action: int):
         self.update_states()
-        self.apply_action_to_player_loc(action)
+        did_invalid_action: bool = self.apply_action_to_player_loc(action)
         is_player_dead: bool = self.get_state() in self.lethal_states
         did_player_win: bool = self.get_state() in self.goal_states
 
@@ -116,6 +113,8 @@ class Environment:
             reward: float = -5
         elif did_player_win:
             reward: float = 5
+        # elif did_invalid_action:
+        #     reward: float = -2.5
         else:
             reward: float = -1
 
