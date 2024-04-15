@@ -11,7 +11,7 @@ def get_state_index(x, y, z):
 class SARSA_0:
     """ On policy SARSA RL agent, updated for the TunnelRunner environment."""
 
-    def __init__(self, num_episodes_to_decay_epsilon: int = 1_000, seed: int = 13):
+    def __init__(self, num_episodes_to_decay_epsilon: int = 5_000, seed: int = 13):
         self.initial_state = get_state_index(0, 0, 0)
         self.expl_x = 0  # Explorer's x position from 0 to 7
         self.expl_y = 0  # Explorer's y position from 0 to 7
@@ -20,12 +20,13 @@ class SARSA_0:
         self.num_states = 343  # Updated to reflect the total number of states in the environment
         self.num_actions = 9  # Assuming the number of actions remains the same
         self.episode = []  # To store state, action, reward for the episode
-        self.gamma = 0.99  # Discount rate
-        self.epsilon = 0.1  # Epsilon for exploration-exploitation trade-off
+        self.gamma = 0.9  # Discount rate
+
         self.alpha = 0.1  # Learning rate
         self.action = 0
-        self.epsilon_max = 1.0  # Starting value of epsilon
-        self.epsilon_min = 0.01  # Minimum value of epsilon
+        self.epsilon_initial = 0.9  # Starting value of epsilon
+        self.epsilon_final = 0.1  # Minimum value of epsilon
+        self.epsilon = self.epsilon_initial  # Epsilon for exploration-exploitation trade-off
         self.N = num_episodes_to_decay_epsilon  # Total number of episodes to reduce epsilon
         self.n_step = 0  # Counter for the number of steps (for epsilon decay)
         self.q = np.zeros((self.num_states, self.num_actions), dtype="float64")  # State-action values array, resized
@@ -64,8 +65,8 @@ class SARSA_0:
 
     def update_epsilon(self):
         # Calculate decayed epsilon based on the number of episodes completed
-        r = max((self.N - self.n_step) / self.N, 0)
-        self.epsilon = (self.epsilon_max - self.epsilon_min) * r + self.epsilon_min
+        decay_rate: float = (self.epsilon_final - self.epsilon_initial) / self.N
+        self.epsilon = max(self.epsilon_final, self.epsilon + decay_rate)
         self.n_step += 1  # Increment the episode counter
 
     def get_number_of_actions(self):
@@ -76,11 +77,10 @@ class SARSA_0:
 
     def e_greedy(self, state):
         self.state = state
-        a_star = np.argmax(self.q[state])
-        if self.rng.random() > self.epsilon:
-            return a_star
+        if self.rng.random() >= self.epsilon:
+            return np.argmax(self.q[state])
         else:
-            return np.random.choice(self.num_actions)
+            return self.rng.choice(self.num_actions)
 
     def select_action(self, state):
         if state >= self.num_states:
@@ -92,6 +92,7 @@ class SARSA_0:
 
     def start_episode(self):
         self.episode = []
+
 
         self.cumulative_rewards += self.rewards_for_curr_episode
         if self.is_converged:

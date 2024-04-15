@@ -18,9 +18,13 @@ class RlAgent:
         self.reward = 0
         self.action = 0
         self.turn = 0
-        self.epsilon = 0.9
+        self.initial_epsilon: float = 0.9
+        self.final_epsilon: float = 0.1
+        self.num_episodes_until_final_epsilon: int = 5_000
+        self.epsilon_decay_rate: float = (self.final_epsilon - self.initial_epsilon) / self.num_episodes_until_final_epsilon
+        self.epsilon = self.initial_epsilon
         # self.alpha = 0.1
-        self.gamma = 1
+        self.gamma = 0.9
         self.number_of_states = 343
         self.number_of_actions = 9
         self.seed: int = seed
@@ -59,7 +63,7 @@ class RlAgent:
 
     def e_greedy(self, actions):
         a_star_idx = np.argmax(actions)
-        if self.random_num_gen.random() >= self.epsilon:
+        if self.epsilon <= self.random_num_gen.random():
             return a_star_idx
         else:
             b = actions.size
@@ -136,6 +140,8 @@ class RlAgent:
         else:
             self.rewards_since_convergence = 0
         self.rewards_for_curr_episode = 0
+
+        self.epsilon = max(self.epsilon + self.epsilon_decay_rate, self.final_epsilon)
 
         if self.episodes_trained > 0:
             has_small_difference: bool = np.isclose(self.last_qtable - self.q, 0, atol=self.convergence_tolerance).all()

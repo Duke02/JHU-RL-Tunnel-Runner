@@ -16,20 +16,22 @@ import pandas as pd
 from models.tmay9_qagent import QAgent
 from models.RL_agentS0 import SARSA_0
 from models.MC_agent import RlAgent as MonteCarlo
+from Trystan_Files.Project2_agent import RLAgent as TrystanMC
 from environment import Environment as Env
 
 # Total number of episodes to train each agent on.
-NUM_EPISODES: int = 10_000
+NUM_EPISODES: int = 50_000
 # Total number of agents per AI Type.
 NUM_AGENTS: int = 10
 OPTIMAL_PATH_LENGTH: int = 11
+CONVERGENCE_NUM: int = 5
 
 DATA_DIR: Path = Path('.').resolve() / 'data'
 MODELS_DIR: Path = DATA_DIR / 'models'
 
 
 class TrainingResult(tp.TypedDict):
-    agent: QAgent | SARSA_0 | MonteCarlo | None
+    agent: QAgent | SARSA_0 | MonteCarlo | None | TrystanMC
     seed: int
     perc_states_visited: float
     total_gain: float
@@ -47,10 +49,10 @@ def has_converged(path_lens: tp.Iterable[int], tolerance: int = 1) -> bool:
 def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
     total_gain: float = 0
     convergence_rate: int = -1
-    path_len_last_30_episodes: deque[int] = deque([], 30)
+    path_len_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
     for episode in tqdm(range(NUM_EPISODES), 'Training QAgent...'):
         if episode > 30:
-            converged: bool = has_converged(path_len_last_30_episodes)
+            converged: bool = has_converged(path_len_last_n_episodes)
             if convergence_rate < 0 and converged:
                 convergence_rate = episode
             # This is for if we wanted the first time we "converge" to be
@@ -76,7 +78,7 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
             curr_state, reward, is_terminal = env.execute_action(action)
             total_gain += reward * agent.discount_factor
             curr_path_len += 1
-        path_len_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
+        path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
         agent.react_to_state(curr_state, reward)
     return TrainingResult(agent=agent,
                           win_rate=float(sum(agent.did_win_last_30)) / min(30, NUM_EPISODES),
@@ -92,10 +94,10 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
 def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
     total_gain: float = 0
     did_win: deque[bool] = deque(maxlen=30)
-    path_len_last_30_episodes: deque[int] = deque([], 30)
+    path_len_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
     states_visited: set[int] = set()
     for episode in tqdm(range(NUM_EPISODES), 'Training SARSA...'):
-        if episode > 30 and not agent.is_converged and has_converged(path_len_last_30_episodes):
+        if episode > 30 and not agent.is_converged and has_converged(path_len_last_n_episodes):
             agent.convergence_rate = episode
         agent.start_episode()
         curr_state: int = env.reset()
@@ -118,7 +120,7 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
             next_action: int = agent.select_action(next_state)
             agent.update_Q_SARSA(curr_state, action, reward, next_state, next_action)
             curr_state = next_state
-        path_len_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
+        path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
         did_win.append(next_state in env.goal_states)
 
     return TrainingResult(agent=agent,
@@ -132,16 +134,60 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
                           seed=agent.seed)
 
 
+def train_trystan_mc(agent: TrystanMC, env: Env) -> TrainingResult:
+    total_gain: float = 0
+    states_visited: set[int] = set()
+    did_win: deque[bool] = deque(maxlen=30)
+    path_lens_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
+
+    for episode in tqdm(range(NUM_EPISODES), 'Training Monte Carlo...'):
+        if episode > 30 and not agent.is_converged and has_converged(path_lens_last_n_episodes):
+            agent.convergence_rate = episode
+
+        curr_state: int = env.reset()
+        agent.reset()
+        is_terminal: bool = curr_state in env.get_terminal_states()
+        reward: float = 0
+
+        curr_path_len: int = 0
+
+        curr_visited_states: set[int] = {curr_state}
+
+        while not is_terminal:
+            action: int = agent.react_to_state(curr_state, reward)
+            new_state, reward, is_terminal = env.execute_action(action)
+            curr_state = new_state
+            curr_visited_states.add(curr_state)
+            curr_path_len += 1
+
+        path_lens_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
+
+        curr_gain, _ = agent.update_qtable()
+        total_gain += curr_gain
+        states_visited.update(curr_visited_states)
+        did_win.append(curr_state in env.goal_states)
+
+    return TrainingResult(agent=agent,
+                          total_gain=total_gain,
+                          perc_states_visited=len(states_visited) / env.number_of_states,
+                          win_rate=sum(did_win) / len(did_win),
+                          convergence_rate=agent.convergence_rate,
+                          sample_efficiency=agent.sample_efficiency,
+                          asymptotic_performance=agent.asymptotic_performance,
+                          has_converged=agent.is_converged,
+                          seed=agent.seed)
+
+
 def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
     agent.reset()
 
     total_gain: float = 0
     states_visited: set[int] = set()
     did_win: deque[bool] = deque(maxlen=30)
-    path_lens_last_30_episodes: deque[int] = deque([], 30)
+    path_lens_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
 
     for episode in tqdm(range(NUM_EPISODES), 'Training Monte Carlo...'):
-        if episode > 30 and not agent.is_converged and has_converged(path_lens_last_30_episodes):
+        if episode > 30 and not agent.is_converged and has_converged(path_lens_last_n_episodes):
             agent.convergence_rate = episode
 
         curr_state: int = env.reset()
@@ -158,7 +204,7 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
             curr_state = new_state
             curr_path_len += 1
 
-        path_lens_last_30_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
+        path_lens_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
 
         curr_gain, _ = agent.update_q()
         total_gain += curr_gain
@@ -193,7 +239,9 @@ if __name__ == '__main__':
                terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1,
                epsilon_step=0, initial_q_value=0, seed=13 * i) for i in range(NUM_AGENTS)]
     sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES // 2, seed=i * 13) for i in range(NUM_AGENTS)]
-    monte_carlos: list[MonteCarlo] = [MonteCarlo(seed=i * 13) for i in range(NUM_AGENTS)]
+    monte_carlos: list[MonteCarlo | TrystanMC] = [MonteCarlo(seed=13 * i) for i in range(NUM_AGENTS)]
+    # [TrystanMC(num_actions=environment.number_of_possible_actions, num_states=environment.number_of_states,
+    #                                        epsilon=.1, seed=13 * i) for i in range(NUM_AGENTS)]
 
     print('Training models...')
 

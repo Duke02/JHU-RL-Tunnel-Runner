@@ -43,7 +43,7 @@ class Environment:
         self.initial_agent_location: np.ndarray = np.array(list(start_xy))
         self.agent_location = self.initial_agent_location
 
-        self.directions: list[tuple[int, int]] = [(x, y) for x in range(-1, 2) for y in range(-1, 2)]
+        self.directions: list[tuple[int, int]] = [(x, y) for x in [0, -1, 1] for y in [0, -1, 1]]
 
     @property
     def number_of_states(self) -> int:
