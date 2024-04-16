@@ -1,8 +1,6 @@
 """
 This is the main for like all of our models. Yeehaw.
 """
-from __future__ import annotations
-
 import typing as tp
 from pathlib import Path
 from collections import deque
