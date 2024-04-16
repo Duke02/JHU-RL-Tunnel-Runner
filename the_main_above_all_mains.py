@@ -1,6 +1,7 @@
 """
 This is the main for like all of our models. Yeehaw.
 """
+from __future__ import annotations
 
 import typing as tp
 from pathlib import Path
@@ -93,45 +94,49 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
 
 def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
     total_gain: float = 0
-    did_win: deque[bool] = deque(maxlen=30)
     path_len_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
     states_visited: set[int] = set()
     for episode in tqdm(range(NUM_EPISODES), 'Training SARSA...'):
-        if episode > 30 and not agent.is_converged and has_converged(path_len_last_n_episodes):
-            agent.convergence_rate = episode
         agent.start_episode()
         curr_state: int = env.reset()
         states_visited.add(curr_state)
         is_terminal: bool = curr_state in env.get_terminal_states()
-        reward: float = 0
-        next_state: int = curr_state
-        curr_path_len: int = 0
 
-        while not is_terminal:
+        if not is_terminal:
             action: int = agent.select_action(curr_state)
+
+        curr_path_len: int = 0
+        episode_gain: float = 0  # To track gain per episode
+        while not is_terminal:
+
             next_state, reward, is_terminal = env.execute_action(action)
             states_visited.add(next_state)
-            total_gain += reward * agent.gamma
-            curr_path_len += 1
-
-            if is_terminal:
-                break
-
-            next_action: int = agent.select_action(next_state)
+            next_action: int = agent.select_action(
+                next_state) if not is_terminal else None  # SARSA requires next action, which is None if state is terminal
             agent.update_Q_SARSA(curr_state, action, reward, next_state, next_action)
-            curr_state = next_state
+            curr_state, action = next_state, next_action  # Update state and action
+            curr_path_len += 1
+            episode_gain += reward * (agent.gamma ** curr_path_len)  # Apply discount factor
+
         path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
-        did_win.append(next_state in env.goal_states)
+        total_gain += episode_gain  # Accumulate episode gain to total gain
+        agent.convergence_rate = episode if has_converged(
+            path_len_last_n_episodes) and agent.convergence_rate < 0 else agent.convergence_rate
+
+    win_rate = sum([1 for pl in path_len_last_n_episodes if
+                    pl <= OPTIMAL_PATH_LENGTH + 1]) / CONVERGENCE_NUM  # Calculate win rate based on path lengths
 
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
-                          win_rate=sum(did_win) / len(did_win),
-                          perc_states_visited=len(states_visited) / env.number_of_states,
+                          win_rate=win_rate,
+                          perc_states_visited=len(states_visited) / agent.get_number_of_states(),
                           convergence_rate=agent.convergence_rate,
                           sample_efficiency=agent.sample_efficiency,
                           asymptotic_performance=agent.asymptotic_performance,
                           has_converged=agent.is_converged,
                           seed=agent.seed)
+
+
 
 
 def train_trystan_mc(agent: TrystanMC, env: Env) -> TrainingResult:
@@ -235,10 +240,12 @@ if __name__ == '__main__':
 
     environment: Env = Env()
     qagents: list[QAgent] = [
-        QAgent(environment.number_of_states, environment.number_of_possible_actions, initial_epsilon=0.1, discount_factor=.9, learning_rate=.1,
+        QAgent(environment.number_of_states, environment.number_of_possible_actions, initial_epsilon=0.1,
+               discount_factor=.9, learning_rate=.1,
                terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1,
                epsilon_step=0, initial_q_value=0, seed=13 * i) for i in range(NUM_AGENTS)]
-    sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES // 2, seed=i * 13) for i in range(NUM_AGENTS)]
+    sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES, seed=13 * i) for i in
+                             range(NUM_AGENTS)]
     monte_carlos: list[MonteCarlo | TrystanMC] = [MonteCarlo(seed=13 * i) for i in range(NUM_AGENTS)]
     # [TrystanMC(num_actions=environment.number_of_possible_actions, num_states=environment.number_of_states,
     #                                        epsilon=.1, seed=13 * i) for i in range(NUM_AGENTS)]
