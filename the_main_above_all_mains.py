@@ -244,7 +244,7 @@ if __name__ == '__main__':
                discount_factor=.9, learning_rate=.1,
                terminal_states=environment.terminal_states, win_states=environment.goal_states, final_epsilon=.1,
                epsilon_step=0, initial_q_value=0, seed=13 * i) for i in range(NUM_AGENTS)]
-    sarsas: list[SARSA_0] = [SARSA_0(num_episodes_to_decay_epsilon=NUM_EPISODES, seed=13 * i) for i in
+    sarsas: list[SARSA_0] = [SARSA_0(seed=13 * i) for i in
                              range(NUM_AGENTS)]
     monte_carlos: list[MonteCarlo | TrystanMC] = [MonteCarlo(seed=13 * i) for i in range(NUM_AGENTS)]
     # [TrystanMC(num_actions=environment.number_of_possible_actions, num_states=environment.number_of_states,
