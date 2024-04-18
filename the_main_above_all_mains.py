@@ -19,7 +19,7 @@ from Trystan_Files.Project2_agent import RLAgent as TrystanMC
 from environment import Environment as Env
 
 # Total number of episodes to train each agent on.
-NUM_EPISODES: int = 5_000
+NUM_EPISODES: int = 50_000
 # Total number of agents per AI Type.
 NUM_AGENTS: int = 10
 OPTIMAL_PATH_LENGTH: int = 11
@@ -34,6 +34,7 @@ class EpisodicResult(tp.TypedDict):
     total_gain: float
     win_rate: float
     did_win: bool
+    path_length: int
 
 
 class TrainingResult(tp.TypedDict):
@@ -94,7 +95,8 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
         episodic_results.append(EpisodicResult(perc_states_visited=agent.perc_states_visited,
                                                total_gain=total_gain,
                                                win_rate=num_wins / (episode + 1),
-                                               did_win=did_win))
+                                               did_win=did_win,
+                                               path_length=curr_path_len))
         path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
 
     return TrainingResult(agent=agent,
@@ -113,6 +115,9 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
     total_gain: float = 0
     path_len_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
     states_visited: set[int] = set()
+    episodic_results: list[EpisodicResult] = []
+    num_wins: int = 0
+
     for episode in tqdm(range(NUM_EPISODES), 'Training SARSA...'):
         agent.start_episode()
         curr_state: int = env.reset()
@@ -125,7 +130,6 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
         curr_path_len: int = 0
         episode_gain: float = 0  # To track gain per episode
         while not is_terminal:
-
             next_state, reward, is_terminal = env.execute_action(action)
             states_visited.add(next_state)
             next_action: int = agent.select_action(
@@ -137,11 +141,20 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
 
         path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
         total_gain += episode_gain  # Accumulate episode gain to total gain
+
+        did_win: bool = curr_state in env.goal_states
+        if did_win:
+            num_wins += 1
+        episodic_results.append(EpisodicResult(perc_states_visited=len(states_visited) / env.number_of_states,
+                                               total_gain=total_gain,
+                                               win_rate=num_wins / (episode + 1),
+                                               did_win=did_win,
+                                               path_length=curr_path_len))
+
         agent.convergence_rate = episode if has_converged(
             path_len_last_n_episodes) and agent.convergence_rate < 0 else agent.convergence_rate
 
-    win_rate = sum([1 for pl in path_len_last_n_episodes if
-                    pl <= OPTIMAL_PATH_LENGTH + 1]) / CONVERGENCE_NUM  # Calculate win rate based on path lengths
+    win_rate = num_wins / NUM_EPISODES
 
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
@@ -151,7 +164,8 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
                           sample_efficiency=agent.sample_efficiency,
                           asymptotic_performance=agent.asymptotic_performance,
                           has_converged=agent.is_converged,
-                          seed=agent.seed, episodic_results=[])
+                          seed=agent.seed,
+                          episodic_results=episodic_results)
 
 
 def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
@@ -159,8 +173,10 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
 
     total_gain: float = 0
     states_visited: set[int] = set()
-    did_win: deque[bool] = deque(maxlen=30)
     path_lens_last_n_episodes: deque[int] = deque([], CONVERGENCE_NUM)
+
+    num_wins: int = 0
+    episodic_results: list[EpisodicResult] = []
 
     for episode in tqdm(range(NUM_EPISODES), 'Training Monte Carlo...'):
         if episode > 30 and not agent.is_converged and has_converged(path_lens_last_n_episodes):
@@ -180,23 +196,32 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
             curr_state = new_state
             curr_path_len += 1
 
+        did_win: bool = curr_state in env.goal_states
+
+        if did_win:
+            num_wins += 1
+
         path_lens_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
 
         curr_gain, _ = agent.update_q()
         total_gain += curr_gain
         states_visited.update(set(agent.visited_states))
-        did_win.append(curr_state in env.goal_states)
+        episodic_results.append(EpisodicResult(perc_states_visited=len(states_visited) / env.number_of_states,
+                                               total_gain=total_gain,
+                                               win_rate=num_wins / (episode + 1),
+                                               did_win=did_win,
+                                               path_length=curr_path_len))
 
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
                           perc_states_visited=len(states_visited) / env.number_of_states,
-                          win_rate=sum(did_win) / len(did_win),
+                          win_rate=num_wins / NUM_EPISODES,
                           convergence_rate=agent.convergence_rate,
                           sample_efficiency=agent.sample_efficiency,
                           asymptotic_performance=agent.asymptotic_performance,
                           has_converged=agent.is_converged,
                           seed=agent.seed,
-                          episodic_results=[])
+                          episodic_results=episodic_results)
 
 
 def create_training_result_to_save(tr: TrainingResult) -> TrainingResult:
@@ -251,11 +276,11 @@ if __name__ == '__main__':
         np.savetxt(mc_dir / f'model-{i}.mdl', mc.q)
 
         qrdf: pd.DataFrame = pd.DataFrame.from_records(qr['episodic_results'])
-        qrdf.to_csv(qagent_dir / f'episode-results-{i}.csv', index=False)
+        qrdf.to_csv(qagent_dir / f'results-QAgent-{i}.csv', index=False)
         srdf: pd.DataFrame = pd.DataFrame.from_records(sr['episodic_results'])
-        srdf.to_csv(sarsa_dir / f'episode-results-{i}.csv', index=False)
+        srdf.to_csv(sarsa_dir / f'results-SARSA-{i}.csv', index=False)
         mcrdf: pd.DataFrame = pd.DataFrame.from_records(mcr['episodic_results'])
-        mcrdf.to_csv(mc_dir / f'episode-results-{i}.csv', index=False)
+        mcrdf.to_csv(mc_dir / f'results-MonteCarlo-{i}.csv', index=False)
 
     print('Processing results...')
 
