@@ -30,6 +30,7 @@ MODELS_DIR: Path = DATA_DIR / 'models'
 
 
 class EpisodicResult(tp.TypedDict):
+    episode: int
     perc_states_visited: float
     total_gain: float
     win_rate: float
@@ -96,7 +97,8 @@ def train_qagent(agent: QAgent, env: Env) -> TrainingResult:
                                                total_gain=total_gain,
                                                win_rate=num_wins / (episode + 1),
                                                did_win=did_win,
-                                               path_length=curr_path_len))
+                                               path_length=curr_path_len,
+                                               episode=episode))
         path_len_last_n_episodes.append(curr_path_len if reward > 0 else OPTIMAL_PATH_LENGTH ** 2)
 
     return TrainingResult(agent=agent,
@@ -149,7 +151,8 @@ def train_sarsa(agent: SARSA_0, env: Env) -> TrainingResult:
                                                total_gain=total_gain,
                                                win_rate=num_wins / (episode + 1),
                                                did_win=did_win,
-                                               path_length=curr_path_len))
+                                               path_length=curr_path_len,
+                                               episode=episode))
 
         agent.convergence_rate = episode if has_converged(
             path_len_last_n_episodes) and agent.convergence_rate < 0 else agent.convergence_rate
@@ -210,7 +213,8 @@ def train_monte_carlo(agent: MonteCarlo, env: Env) -> TrainingResult:
                                                total_gain=total_gain,
                                                win_rate=num_wins / (episode + 1),
                                                did_win=did_win,
-                                               path_length=curr_path_len))
+                                               path_length=curr_path_len,
+                                               episode=episode))
 
     return TrainingResult(agent=agent,
                           total_gain=total_gain,
