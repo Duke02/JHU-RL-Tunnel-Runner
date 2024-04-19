@@ -1,18 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Feb 19 12:12:57 2024
+Created on Tue Apr 16 16:56:05 2024
 
 @author: boss
 """
-import MC_agent as MC
+
+#optima path
+#x,y= 6,0 -> 5,0 -> 4,0 -> 3,1 -> 4,2 -> 5,3 -> 4,4 -> 3,5 -> 2,6 -> 1,6 -> 0,6
+#    START   W(4)   W(4)   SW(8  SE(6)  SE(6)  SW(8)   SW(8)  SW(8)  W(4)   W(4)
+# number of moves = 11
+import QLearning_agent as QL
 import FP_Env as env
 import numpy as np
 
 
 def main():
     environment = env.TunnelRunner()
-    agent = MC.RlAgent()
+    agent = QL.RlAgent()
     # Check that the environment parameters match
     if (environment.get_number_of_states() == agent.get_number_of_states()) and \
             (environment.get_number_of_actions() == agent.get_number_of_actions()):
@@ -21,6 +26,7 @@ def main():
         agents = 1
         episodes = 10000
         for a in range(1,agents+1):
+            print("Agent ",a)
             agent.reset()
             stats = np.zeros((episodes, 3)) # lost, tied, won games per episode
             Gs = np.zeros((episodes,1)) #cumulative returns
@@ -33,24 +39,27 @@ def main():
                 while not game_end:
                     action = agent.select_action(current_state)
                     new_state, reward, game_end = environment.execute_action(action)
-                    agent.update_episode(current_state, action, reward)
+                    #agent.update_episode(current_state, action, reward)
                     current_state = new_state
-        
+                    agent.update_q(new_state, reward)
                 if (current_state in environment.loss):
                     j = 0
                 elif (current_state in environment.win):
                     j = 2
                 stats[i][j] = 1
-                Gs[i,0], v_t = agent.update_q()
+                #Gs[i,0], v_t = agent.update_q(new_state, reward)
+                
+                v_t = agent.get_state_actn_visits()
                 V_t[i,0] = (v_t/agent.get_number_of_states())*100
-                agent.new_episode()
+                #agent.new_episode()
             
             #save new agent data
             agent_knoweledge[a] = [Gs, stats, V_t]
+        
         #save all agents data
         print("\nProgram completed successfully.")
-        np.save('1_agent_10k_epsds_MC.npy', agent_knoweledge)
-        np.save('1_agent_10k_epsds_MC_q.npy', agent.q)
+        np.save('1_agent_10k_epsds_QL.npy', agent_knoweledge)
+        np.save('1_agent_10k_epsds_QL_q.npy', agent.q)
     else:
         print("Environment and Agent parameters do not match. Terminating program.")
 

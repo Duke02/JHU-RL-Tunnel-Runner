@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""
+Created on Wed Feb 21 00:03:54 2024
 
+@author: boss
+"""
 import matplotlib.pyplot as plt
 import numpy as np
 
 
 
 #open saved data
-data = np.load('10_agent_data.npy',allow_pickle='TRUE').item()
-
+data = np.load('1_agent_10k_epsds_MC.npy',allow_pickle='TRUE').item()
+data_pts = 10000
 
 ###############################################################################
 ######################## EXTRACT ALL DATA #####################################
@@ -41,7 +45,7 @@ G_t = []
 # average the found percentage over the 10 agents
 W_t = []
 L_t = []
-for i in range(2000):
+for i in range(data_pts):
     G_t.append(sum(g_t[:i+1])[0]/10)
     W_t.append(sum(wins[:i+1])/10/(i+1))
     L_t.append(sum(losses[:i+1])/10/(i+1))
@@ -52,7 +56,7 @@ V_t = v_t/10
 
 ###############################################################################
 ######################## PLOT  ALL OF THE DATA ################################
-x = np.arange(1, 2001,1)
+x = np.arange(1, data_pts+1,1)
 plt.figure()
 plt.plot(x,G_t)
 plt.grid()

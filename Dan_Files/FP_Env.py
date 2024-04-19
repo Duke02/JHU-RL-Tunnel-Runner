@@ -5,8 +5,8 @@ import random
 
 def get_state_index(x, y, z):
     x_idx = x
-    y_idx = 7 * y + y
-    z_idx = 49 * z
+    y_idx = 7*y+1 if z>0 else 7*y
+    z_idx = 49*z-1 if z>0 else 0
     return x_idx + y_idx + z_idx   # ranges from 0 to 342
 
 
@@ -50,6 +50,9 @@ class TunnelRunner:
 
     def get_state(self):
         return get_state_index(self.runr_x, self.runr_y, self.runr_z)
+    
+    def get_xyz(self):
+        return self.runr_x, self.runr_y, self.runr_z
 
     # Set the current state to the initial state
     def reset(self, runr_starts):
@@ -82,82 +85,84 @@ class TunnelRunner:
         new_state = current_state
         reward = 0
         game_end = False
+        temp_x = self.runr_x
+        temp_y = self.runr_y
+        temp_z = self.runr_z
 
-        # if in terminal states, stay in terminal states
-        if (current_state in self.win) or (current_state in self.loss):
-            new_state = current_state
-            reward = 0
-            game_end = True
-
-        elif (current_state in self.wall):
-            new_state = current_state
-            reward = -1
-            game_end = True
-
-        else:
+        # make sure potential move is within bounds
+        # if action is 0 = 'X' (stays in same place), skip if-elif logic
+        if action == 1: # action is 'NW'  
+            if (temp_x == 0) or (temp_y == 0):
+                pass
+            else:
+                temp_x = temp_x-1 
+                temp_y = temp_y-1 
+                
+        elif action == 2:  # action is 'N'
+            temp_y = 0 if temp_y == 0 else (temp_y-1)
+                    
+        elif action == 3: # action is 'NE'  
+            if (temp_x == 6) or (temp_y == 0):
+                pass
+            else:
+                temp_x = temp_x+1 
+                temp_y = temp_y-1
+                
+        elif action == 4:  # action is 'W'
+            temp_x = 0 if temp_x == 0 else (temp_x-1)
+            
+        elif action == 5:  # action is 'E'
+            temp_x = 6 if temp_x == 6 else (temp_x+1)
+            
+        elif action == 6: # action is 'SE'  
+            if (temp_x == 6) or (temp_y == 6):
+                pass
+            else:
+                temp_x = temp_x+1 
+                temp_y = temp_y+1
+                
+        elif action == 7: # action is 'S'  
+            temp_y = 6 if temp_y == 6 else (temp_y+1)
+            
+        elif action == 8: # action is 'SW'  
+            if (temp_x == 0) or (temp_y == 6):
+                pass
+            else:
+                temp_x = temp_x-1 
+                temp_y = temp_y+1 
+                
+        # recalculate the new state based on change of level
+        new_state = get_state_index(temp_x, temp_y, temp_z)
+        temp_z = 0 if new_state > 293 else temp_z+1
+        new_state = get_state_index(temp_x, temp_y, temp_z)
+          
+        # check if new state is viable
+        if new_state in self.wall: #if new state = wall, stay in prev state
             temp_x = self.runr_x
             temp_y = self.runr_y
             temp_z = self.runr_z
-
-            # make sure potential move is within bounds
-            # if action is 0 = 'X' (stays in same place), skip if-elif logic
-            if action == 1: # action is 'NW'  
-                temp_x = 0 if temp_x == 0 else (temp_x-1)
-                temp_y = 0 if temp_y == 0 else (temp_y-1)
-                    
-            elif action == 2:  # action is 'N'
-                temp_y = 0 if temp_y == 0 else (temp_y-1)
-                    
-            elif action == 3: # action is 'NE'  
-                temp_x = 6 if temp_x == 6 else (temp_x+1)
-                temp_y = 0 if temp_y == 0 else (temp_y-1)
-                    
-            elif action == 4:  # action is 'W'
-                temp_x = 0 if temp_x == 0 else (temp_x-1)
-
-            elif action == 5:  # action is 'E'
-                temp_x = 6 if temp_x == 6 else (temp_x+1)
-                
-            elif action == 6: # action is 'SE'  
-                temp_x = 6 if temp_x == 6 else (temp_x+1)
-                temp_y = 6 if temp_y == 6 else (temp_y+1)
-            
-            elif action == 7: # action is 'S'  
-                temp_y = 6 if temp_y == 6 else (temp_y+1)
-            
-            elif action == 6: # action is 'SW'  
-                temp_x = 0 if temp_x == 0 else (temp_x-1)
-                temp_y = 6 if temp_y == 6 else (temp_y+1)
-            
-            # recalculate the new state based on change of level
             new_state = get_state_index(temp_x, temp_y, temp_z)
-            temp_z = 0 if new_state > 293 else temp_z+1
-            new_state = get_state_index(temp_x, temp_y, temp_z)
-           
-            # check if new state is viable
-            if new_state in self.wall: #if new state = wall, stay in prev state
-                temp_x = self.runr_x
-                temp_y = self.runr_y
-                temp_z = self.runr_z
-                new_state = get_state_index(temp_x, temp_y, temp_z)
-                reward = -1
-                game_end = False
+            reward = -1
+            game_end = False
 
-            elif new_state in self.loss:      # you lose
-                reward = -50
-                game_end = True
+        elif new_state in self.loss:      # you lose
+            reward = -50
+            game_end = True
 
-            elif new_state in self.win:     # you won
-                reward = 50
-                game_end = True
+        elif new_state in self.win:     # you won
+            reward = 50
+            game_end = True
 
+        else:
+            if action == 0:
+                reward = -5
             else:
                 reward = -1
-                game_end = False
-
-            self.runr_x = temp_x
-            self.runr_y = temp_y
-            self.runr_z = temp_z
+            game_end = False
+    
+        self.runr_x = temp_x
+        self.runr_y = temp_y
+        self.runr_z = temp_z
 
         return new_state, reward, game_end
 
