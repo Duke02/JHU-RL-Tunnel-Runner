@@ -19,7 +19,7 @@ from Trystan_Files.Project2_agent import RLAgent as TrystanMC
 from environment import Environment as Env
 
 # Total number of episodes to train each agent on.
-NUM_EPISODES: int = 50_000
+NUM_EPISODES: int = 75_000
 # Total number of agents per AI Type.
 NUM_AGENTS: int = 10
 OPTIMAL_PATH_LENGTH: int = 11

@@ -109,13 +109,35 @@ class Environment:
         is_player_dead: bool = self.get_state() in self.lethal_states
         did_player_win: bool = self.get_state() in self.goal_states
 
+        magnitude_of_reward: float = 15
+
         if is_player_dead:
-            reward: float = -5
+            reward: float = -magnitude_of_reward
         elif did_player_win:
-            reward: float = 5
+            reward: float = magnitude_of_reward
         # elif did_invalid_action:
         #     reward: float = -2.5
         else:
             reward: float = -1
 
         return self.get_state(), reward, self.get_state() in self.terminal_states
+
+    def get_map(self) -> np.ndarray:
+        out_map: np.ndarray = np.zeros((SIDE_LENGTH, SIDE_LENGTH))
+        # Wall
+        out_map[2, :3] = 1
+        out_map[1, -3:] = 1
+        out_map[3, 2:5] = 1
+
+        # Cannonballs
+        out_map[4, -(1 + self.current_cannon_timestep)] = 2
+        out_map[5, self.current_cannon_timestep] = 2
+
+        # Goal location
+        out_map[6, 0] = 3
+        out_map[0, 6] = 4
+
+        # Player location
+        out_map[self.agent_location[1], self.agent_location[0]] = 5
+
+        return out_map
